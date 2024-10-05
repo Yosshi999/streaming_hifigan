@@ -1,4 +1,5 @@
 g2p-en
+matplotlib
 onnx
 onnxruntime
 sounddevice

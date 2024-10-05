@@ -4,6 +4,7 @@ import onnxruntime
 import numpy as np
 from numpy.lib.stride_tricks import as_strided
 import soundfile as sf
+import matplotlib.pyplot as plt
 import math
 import time
 
@@ -55,29 +56,39 @@ nchunk = math.ceil(max(0, inlen - IN_MARGIN * 2) / VALID_IN_CHUNK)
 inlen_with_pad = nchunk * VALID_IN_CHUNK + IN_MARGIN * 2
 pad = inlen_with_pad - inlen
 assert pad >= 0
-spec = np.pad(spec, ((0, pad), (0, 0)))
+spec = np.pad(spec, ((0, pad), (0, 0)), "constant", constant_values=0)
 specview = as_strided(spec, (nchunk, IN_CHUNK, spec.shape[1]), (spec.strides[0] * VALID_IN_CHUNK, spec.strides[0], spec.strides[1]))
 
 outs = []
 for i, view in enumerate(specview):
-    segm = session.run(["wave"], {"spectrogram": view[None]})[0][0]  # (Lout,)
-    if i == 0:
+    if len(specview) == 1:
+        # only 1 chunk
+        segm = session.run(["wave"], {"spectrogram": view[None, :len(view)-pad]})[0][0]  # (Lout,)
+        outs.append(segm)
+        t4 = time.perf_counter()
+    elif i == 0:
         # first chunk
+        segm = session.run(["wave"], {"spectrogram": view[None, :]})[0][0]  # (Lout,)
         outs.append(segm[:-OUT_MARGIN])
         t4 = time.perf_counter()
     elif i == len(specview) - 1:
         # last chunk
+        segm = session.run(["wave"], {"spectrogram": view[None, :len(view)-pad]})[0][0]  # (Lout,)
         outs.append(segm[OUT_MARGIN:])
     else:
+        segm = session.run(["wave"], {"spectrogram": view[None, :]})[0][0]  # (Lout,)
         outs.append(segm[OUT_MARGIN:-OUT_MARGIN])
 outwave = np.concatenate(outs)
-assert len(outwave) == nchunk * VALID_OUT_CHUNK + OUT_MARGIN * 2
-outwave = outwave[:inlen * 256]
+assert len(outwave) == inlen * 256
 t5 = time.perf_counter()
 
 sf.write("speech_full.wav", waveform_full.ravel(), samplerate=22050)
 sf.write("speech_chunked.wav", outwave, samplerate=22050)
 diff = np.abs(waveform_full.ravel() - outwave)
+plt.plot(np.arange(len(diff)), diff, "r-")
+plt.xlabel("frame")
+plt.ylabel("abs diff")
+plt.savefig("diff.png")
 print("diff max:", diff.max())
 print("diff med:", np.median(diff))
 print("diff mean:", np.mean(diff))

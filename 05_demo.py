@@ -71,17 +71,20 @@ def tts_chunked(sample_text: str):
     spec = np.pad(spec, ((0, pad), (0, 0)))
     specview = as_strided(spec, (nchunk, IN_CHUNK, spec.shape[1]), (spec.strides[0] * VALID_IN_CHUNK, spec.strides[0], spec.strides[1]))
     for i, view in enumerate(specview):
-        segm = session.run(["wave"], {"spectrogram": view[None]})[0][0]  # (Lout,)
         if len(specview) == 1:
             # only 1 chunk
-            yield segm[:len(segm)-pad*256]
+            segm = session.run(["wave"], {"spectrogram": view[None, :len(view)-pad]})[0][0]  # (Lout,)
+            yield segm
         elif i == 0:
             # first chunk
+            segm = session.run(["wave"], {"spectrogram": view[None, :]})[0][0]  # (Lout,)
             yield segm[:-OUT_MARGIN]
         elif i == len(specview) - 1:
             # last chunk
-            yield segm[OUT_MARGIN:len(segm)-pad*256]
+            segm = session.run(["wave"], {"spectrogram": view[None, :len(view)-pad]})[0][0]  # (Lout,)
+            yield segm[OUT_MARGIN:]
         else:
+            segm = session.run(["wave"], {"spectrogram": view[None, :]})[0][0]  # (Lout,)
             yield segm[OUT_MARGIN:-OUT_MARGIN]
 
 try:
