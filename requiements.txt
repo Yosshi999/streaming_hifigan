@@ -1,0 +1,7 @@
+g2p-en
+onnx
+onnxruntime
+sounddevice
+torch
+transformers
+soundfile
